@@ -1,0 +1,2 @@
+record_duration,enable_video,enable_screenshot,external_endpoint
+10,true,true,"https://example.com/upload"
