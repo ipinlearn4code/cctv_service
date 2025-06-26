@@ -14,7 +14,7 @@ class CCTVUpdate(BaseModel):
     status: str | None = None
 
 class CCTVResponse(BaseModel):
-    id: UUID
+    id: str
     name: str
     ip_address: str
     location: str

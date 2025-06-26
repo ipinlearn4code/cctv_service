@@ -64,28 +64,54 @@ class StreamProcessor:
 processor = StreamProcessor()
 
 def generate_frames(cctv_id: str):
+    logging.info(f"Looking for CCTV with id: '{cctv_id}'")
     df = read_csv("data/cctv_config.csv", ["id", "name", "ip_address", "location", "status"])
-    cctv = df[df["id"] == cctv_id]
+    
+    # Clean up the ID column to remove quotes and convert to string
+    df["id"] = df["id"].astype(str).str.strip().str.strip('"')
+    
+    logging.info(f"Available CCTV IDs: {df['id'].tolist()}")
+    logging.info(f"Data types - cctv_id: {type(cctv_id)}, df['id']: {df['id'].dtype}")
+    
+    # Ensure cctv_id is also a clean string
+    cctv_id_clean = str(cctv_id).strip().strip('"')
+    
+    cctv = df[df["id"] == cctv_id_clean]
     if cctv.empty:
-        raise ValueError("CCTV not found")
+        logging.error(f"CCTV with id '{cctv_id_clean}' not found in configuration.")
+        raise ValueError(f"CCTV with id '{cctv_id_clean}' not found")
 
     cap = cv2.VideoCapture(cctv.iloc[0]["ip_address"])
     if not cap.isOpened():
+        logging.error(f"Failed to open stream: {cctv.iloc[0]['ip_address']}")
         raise ValueError(f"Failed to open stream: {cctv.iloc[0]['ip_address']}")
 
     try:
         while True:
             ret, frame = cap.read()
-            if not ret:
-                logging.error("Failed to read frame")
-                break
+            if not ret or frame is None:
+                logging.error(f"Failed to read frame from stream: {cctv.iloc[0]['ip_address']}")
+                time.sleep(1)  # Wait before retrying
+                continue  # Try to read the next frame
 
-            frame = processor.process_frame(frame, cctv_id)
+            try:
+                frame = processor.process_frame(frame, cctv_id)
+            except Exception as e:
+                logging.error(f"Error processing frame: {e}")
+                continue
+
             ret, buffer = cv2.imencode('.jpg', frame)
             if ret:
                 yield (b'--frame\r\n'
                        b'Content-Type: image/jpeg\r\n\r\n' + buffer.tobytes() + b'\r\n')
+            else:
+                logging.error("Failed to encode frame to JPEG.")
             time.sleep(0.033)  # ~30 FPS
 
+    except GeneratorExit:
+        logging.info(f"Stream for CCTV {cctv_id} closed by client.")
+    except Exception as e:
+        logging.error(f"Unhandled exception in generate_frames: {e}")
     finally:
         cap.release()
+        logging.info(f"Released video capture for CCTV {cctv_id}.")

@@ -19,7 +19,7 @@ async def create_cctv(cctv: CCTVCreate):
     return cctv_dict
 
 @router.get("/{id}", response_model=CCTVResponse)
-async def get_cctv(id: UUID):
+async def get_cctv(id: str):
     df = read_csv(CSV_FILE, ["id", "name", "ip_address", "location", "status"])
     cctv = df[df["id"] == str(id)]
     if cctv.empty:
@@ -27,7 +27,7 @@ async def get_cctv(id: UUID):
     return cctv.iloc[0].to_dict()
 
 @router.put("/{id}", response_model=CCTVResponse)
-async def update_cctv(id: UUID, cctv: CCTVUpdate):
+async def update_cctv(id: str, cctv: CCTVUpdate):
     df = read_csv(CSV_FILE, ["id", "name", "ip_address", "location", "status"])
     if str(id) not in df["id"].values:
         raise HTTPException(status_code=404, detail="CCTV not found")
@@ -38,7 +38,7 @@ async def update_cctv(id: UUID, cctv: CCTVUpdate):
     return df[df["id"] == str(id)].iloc[0].to_dict()
 
 @router.delete("/{id}")
-async def delete_cctv(id: UUID):
+async def delete_cctv(id: str):
     df = read_csv(CSV_FILE, ["id", "name", "ip_address", "location", "status"])
     if str(id) not in df["id"].values:
         raise HTTPException(status_code=404, detail="CCTV not found")
