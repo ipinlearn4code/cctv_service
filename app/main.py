@@ -4,6 +4,8 @@ from contextlib import asynccontextmanager
 
 from app.api import cctv_routes, detection_routes, streaming_routes
 from app.core.config import load_detection_config
+from app.core.csv_manager import read_csv
+from app.services.stream_processor import processor
 
 # Setup logging
 logging.basicConfig(
@@ -18,11 +20,26 @@ async def lifespan(app: FastAPI):
     # Startup
     config = load_detection_config()
     logging.info(f"Service started with detection config: {config}")
+    
+    # Start background processing for all active CCTVs
+    try:
+        df = read_csv("data/cctv_config.csv", ["id", "name", "ip_address", "location", "status"])
+        df["id"] = df["id"].astype(str).str.strip().str.strip('"')
+        
+        # Start only active cameras
+        active_cctvs = df[df["status"] == "active"]
+        for _, cctv in active_cctvs.iterrows():
+            cctv_id = cctv["id"]
+            logging.info(f"Starting background processing for CCTV {cctv_id} at startup")
+            processor.start_background_processing(cctv_id)
+    except Exception as e:
+        logging.error(f"Failed to start background processing: {e}")
 
     yield  # <-- Here the app runs
 
-    # Shutdown (opsional)
+    # Shutdown
     logging.info("Service shutting down...")
+    processor.stop_background_processing()  # Stop all background processes
 
 # Create FastAPI app
 app = FastAPI(title="CCTV Detection Service", lifespan=lifespan)
