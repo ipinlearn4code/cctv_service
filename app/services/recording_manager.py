@@ -86,10 +86,12 @@ class VideoRecorder:
                                 frames.append(next_frame)
                             except:
                                 time.sleep(0.01)
-                    actual_duration = time.time() - start_time
-                    actual_fps = max(1, len(frames) / actual_duration)
+                        
+                        actual_duration = time.time() - start_time
+                        actual_fps = max(1, len(frames) / actual_duration)
 
-                    logging.info(f"Collected {len(frames)} frames in {actual_duration:.2f}s. Using FPS: {actual_fps:.2f}")
+                        logging.info(f"Collected {len(frames)} frames in {actual_duration:.2f}s. Using FPS: {actual_fps:.2f}")
+                        
                         # Use a more efficient codec if available
                         try:
                             # Try hardware acceleration if available
@@ -134,10 +136,6 @@ class VideoRecorder:
                 # Reset recording status
                 self.recording = False
                 
-            except:
-                # Queue was empty, just continue waiting
-                time.sleep(0.1)
-
                 # Upload files
                 config = load_detection_config()
                 for file_type, file_path in files:
@@ -149,4 +147,7 @@ class VideoRecorder:
                         logging.error(f"Failed to upload {file_path}: {str(e)}")
 
                 self.last_record_time = time.time()
-                self.recording = False
+                
+            except:
+                # Queue was empty, just continue waiting
+                time.sleep(0.1)

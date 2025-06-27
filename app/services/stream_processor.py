@@ -16,7 +16,7 @@ class StreamProcessor:
         # Load models only once and optimize them
         logging.info("Initializing YOLO models...")
         self.model_weapon = YOLO('runs/detect/train2/weights/best.pt')
-        self.model_person = YOLO('yolov8n.pt')
+        self.model_person = YOLO('yolo11l.pt')
         
         # Optimize models for faster inference
         self.model_weapon.fuse()  # Fuse Conv+BN layers
