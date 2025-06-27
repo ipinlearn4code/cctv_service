@@ -45,9 +45,45 @@ class StreamProcessor:
         
         logging.info("StreamProcessor initialized with optimized weapon and person models.")
 
+    def _calculate_iou(self, box1, box2):
+        """Calculate Intersection over Union (IoU) for two bounding boxes."""
+        x1, y1, x2, y2 = box1
+        x1_b, y1_b, x2_b, y2_b = box2
+        
+        # Calculate intersection coordinates
+        xi1 = max(x1, x1_b)
+        yi1 = max(y1, y1_b)
+        xi2 = min(x2, x2_b)
+        yi2 = min(y2, y2_b)
+        
+        # Calculate intersection area
+        inter_area = max(0, xi2 - xi1) * max(0, yi2 - yi1)
+        
+        # Calculate union area
+        box1_area = (x2 - x1) * (y2 - y1)
+        box2_area = (x2_b - x1_b) * (y2_b - y1_b)
+        union_area = box1_area + box2_area - inter_area
+        
+        return inter_area / union_area if union_area > 0 else 0
+
+    def _are_boxes_close(self, box1, box2, proximity=10):
+        """Check if two bounding boxes are within proximity pixels or overlapping."""
+        x1, y1, x2, y2 = box1
+        x1_b, y1_b, x2_b, y2_b = box2
+        
+        # Check if boxes overlap (IoU > 0) or are within proximity
+        if self._calculate_iou(box1, box2) > 0:
+            return True
+        
+        # Check if boxes are within proximity
+        if (x1 - proximity <= x2_b and x2 + proximity >= x1_b and
+            y1 - proximity <= y2_b and y2 + proximity >= y1_b):
+            return True
+        
+        return False
+
     def process_frame(self, frame, cctv_id):
         # Resize image for faster processing if necessary
-        # For large streams, downscaling can significantly improve performance
         height, width = frame.shape[:2]
         if height > 720:  # Resize large frames for faster processing
             scale = 720 / height
@@ -59,6 +95,7 @@ class StreamProcessor:
         result_weapon = self.model_weapon(frame_resized, conf=0.5, verbose=False)[0]
         result_person = self.model_person(frame_resized, conf=0.3, verbose=False)[0]
         weapon_detected = False
+        person_crowd_detected = False
         
         # Create a copy of the original frame for drawing
         annotated_frame = frame.copy()
@@ -84,6 +121,7 @@ class StreamProcessor:
 
         # Process person detections
         count_person = 0
+        person_boxes = []
         for box in result_person.boxes:
             if int(box.cls) == self.person_class_index:
                 count_person += 1
@@ -92,7 +130,9 @@ class StreamProcessor:
                 coords = box.xyxy[0].tolist()
                 if height > 720:
                     coords = [c / scale for c in coords]
-                    
+                
+                person_boxes.append(coords)
+                
                 x1, y1, x2, y2 = map(int, coords)
                 conf = float(box.conf)
                 
@@ -101,13 +141,36 @@ class StreamProcessor:
                 cv2.putText(annotated_frame, f'{conf:.2f}', (x1, y1 - 10), 
                             cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
 
-        # Add counts to frame - more efficient using one large putText instead of multiple small ones
+        # Check for crowded person detection (15 or more persons with close/overlapping boxes)
+        if count_person >= 15:
+            proximity = 10  # Proximity threshold in pixels
+            groups = []
+            visited = set()
+            
+            for i, box in enumerate(person_boxes):
+                if i not in visited:
+                    current_group = [i]
+                    visited.add(i)
+                    for j, other_box in enumerate(person_boxes):
+                        if j not in visited and i != j:
+                            if self._are_boxes_close(box, other_box, proximity):
+                                current_group.append(j)
+                                visited.add(j)
+                    groups.append(current_group)
+            
+            # If any group has 15 or more persons, trigger crowd detection
+            for group in groups:
+                if len(group) >= 15:
+                    person_crowd_detected = True
+                    break
+
+        # Add counts to frame
         y_offset = 30
         cv2.putText(annotated_frame, f'Person: {count_person}', (10, y_offset), 
                     cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 0), 2)
         y_offset += 30
         
-        # Precalculate weapon counts to avoid multiple iterations
+        # Precalculate weapon counts
         weapon_counts = [0] * len(self.weapon_classes)
         for box in result_weapon.boxes:
             cls_id = int(box.cls)
@@ -120,10 +183,13 @@ class StreamProcessor:
                         cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 0), 2)
             y_offset += 30
 
-        # Handle recording - only if weapons are detected
-        # Use a non-blocking approach to avoid slowing down inference
-        if weapon_detected and (self.config["enable_video"] or self.config["enable_screenshot"]):
-            # Submit frame for recording in a non-blocking way
+        # Add crowd detection status
+        if person_crowd_detected:
+            cv2.putText(annotated_frame, 'Crowd Detected', (10, y_offset), 
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 0, 0), 2)
+
+        # Handle recording - trigger for weapons or crowded persons
+        if (weapon_detected or person_crowd_detected) and (self.config["enable_video"] or self.config["enable_screenshot"]):
             self._submit_frame_for_recording(cctv_id, annotated_frame.copy())
 
         return annotated_frame
@@ -189,10 +255,6 @@ class StreamProcessor:
         # Set buffer size to minimum to reduce latency
         cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
         
-        # Set frame width/height if needed for performance
-        # cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-        # cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-        
         with self.cam_locks[cctv_id]:
             self.active_cams[cctv_id] = True
         
@@ -208,17 +270,17 @@ class StreamProcessor:
                 if not ret or frame is None:
                     failure_count += 1
                     logging.warning(f"Failed to read frame from {cctv_id} (attempt {failure_count})")
-                    if failure_count > 5:  # Reduced from 10 to 5 for faster recovery
+                    if failure_count > 5:
                         logging.error(f"Too many failures reading from {cctv_id}, reconnecting...")
                         cap.release()
-                        time.sleep(1)  # Reduced from 2 to 1
+                        time.sleep(1)
                         cap = cv2.VideoCapture(ip_address)
                         cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
                         failure_count = 0
                         if not cap.isOpened():
                             logging.error(f"Failed to reconnect to camera feed: {ip_address}")
                             break
-                    time.sleep(0.1)  # Reduced from 0.5 to 0.1
+                    time.sleep(0.1)
                     continue
                 
                 # Reset failure count on successful frame read
@@ -281,21 +343,19 @@ class StreamProcessor:
 
     def _submit_frame_for_recording(self, cctv_id, frame):
         """
-        Non-blocking method to handle frame recording when weapons are detected.
-        This ensures that recording operations don't block the main inference process.
+        Non-blocking method to handle frame recording when weapons or crowd are detected.
         """
         try:
             # Check if we need to create a new recorder
             if cctv_id not in self.recorders:
                 self.recorders[cctv_id] = VideoRecorder(
-                    cctv_id, 
-                    self.config["record_duration"], 
+                    cctv_id, self.config["record_duration"], 
                     self.config["enable_video"], 
                     self.config["enable_screenshot"]
                 )
                 # Start the recording in a separate thread
                 Thread(target=self.recorders[cctv_id].start_recording, daemon=True).start()
-                logging.info(f"Started new recording for CCTV {cctv_id} due to weapon detection")
+                logging.info(f"Started new recording for CCTV {cctv_id} due to detection")
                 
             # Use a separate thread to add the frame to avoid blocking the inference
             Thread(
@@ -321,7 +381,6 @@ processor = StreamProcessor()
 def generate_frames(cctv_id: str):
     """
     Generate MJPEG frames for streaming by pulling from the background-processed frames
-    This function doesn't do any processing, it just serves already processed frames
     """
     logging.info(f"Starting MJPEG stream for CCTV id: '{cctv_id}'")
     
@@ -333,10 +392,10 @@ def generate_frames(cctv_id: str):
     
     # Wait for the first frame with a shorter timeout
     start_time = time.time()
-    while time.time() - start_time < 3:  # Reduced from 5 to 3 seconds
+    while time.time() - start_time < 3:
         if processor.get_latest_frame(cctv_id_clean) is not None:
             break
-        time.sleep(0.05)  # Reduced from 0.1 to 0.05
+        time.sleep(0.05)
     
     # Optimization parameters
     last_frame_time = time.time()
@@ -344,7 +403,6 @@ def generate_frames(cctv_id: str):
     
     try:
         no_frame_count = 0
-        # Use a buffer for smoother streaming
         last_frame = None
         
         while True:
@@ -352,7 +410,7 @@ def generate_frames(cctv_id: str):
             current_time = time.time()
             elapsed = current_time - last_frame_time
             
-            # Only get a new frame if enough time has passed (avoid busy waiting)
+            # Only get a new frame if enough time has passed
             if elapsed >= frame_interval:
                 frame = processor.get_latest_frame(cctv_id_clean)
                 
@@ -362,7 +420,7 @@ def generate_frames(cctv_id: str):
                     last_frame = frame
                     last_frame_time = current_time
                     
-                    # Use higher quality for encoding (95 out of 100)
+                    # Use higher quality for encoding
                     encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), 95]
                     ret, buffer = cv2.imencode('.jpg', frame, encode_param)
                     
@@ -372,24 +430,21 @@ def generate_frames(cctv_id: str):
                     else:
                         logging.error("Failed to encode frame to JPEG")
                 else:
-                    # If we have a last good frame, use it instead of waiting
                     no_frame_count += 1
-                    if no_frame_count > 30:  # Reduced from 50 to 30 (~3 seconds)
+                    if no_frame_count > 30:
                         logging.error(f"No frames available for CCTV {cctv_id_clean} after multiple attempts")
                         break
                     
                     if last_frame is not None:
-                        # Use last good frame but with lower quality to indicate staleness
                         encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), 85]
                         ret, buffer = cv2.imencode('.jpg', last_frame, encode_param)
                         if ret:
                             yield (b'--frame\r\n'
                                    b'Content-Type: image/jpeg\r\n\r\n' + buffer.tobytes() + b'\r\n')
                     
-                    time.sleep(0.05)  # Wait a bit before trying again
+                    time.sleep(0.05)
                     continue
             else:
-                # If we're ahead of schedule, sleep for the remaining time
                 sleep_time = max(0.001, frame_interval - elapsed)
                 time.sleep(sleep_time)
     
