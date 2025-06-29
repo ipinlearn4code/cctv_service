@@ -15,12 +15,36 @@ class StreamProcessor:
     def __init__(self):
         # Load models only once and optimize them
         logging.info("Initializing YOLO models...")
-        self.model_weapon = YOLO('runs/detect/train2/weights/best.pt')
-        self.model_person = YOLO('yolo11l.pt')
+        
+        try:
+            self.model_weapon = YOLO('runs/detect/train2/weights/best.pt')
+            logging.info("Weapon detection model loaded successfully")
+        except Exception as e:
+            logging.error(f"Failed to load weapon model: {e}")
+            raise
+        
+        try:
+            # Try loading YOLOv11 large model, fallback to alternatives if needed
+            self.model_person = YOLO('yolo11l.pt')
+            logging.info("Person detection model (yolo11l.pt) loaded successfully")
+        except Exception as e:
+            logging.warning(f"Failed to load yolo11l.pt: {e}")
+            try:
+                # Fallback to YOLOv8 model which is more stable
+                logging.info("Trying fallback to yolov8n.pt...")
+                self.model_person = YOLO('yolov8n.pt')
+                logging.info("Person detection model (yolov8n.pt) loaded successfully")
+            except Exception as e2:
+                logging.error(f"Failed to load fallback model: {e2}")
+                raise
         
         # Optimize models for faster inference
-        self.model_weapon.fuse()  # Fuse Conv+BN layers
-        self.model_person.fuse()
+        try:
+            self.model_weapon.fuse()  # Fuse Conv+BN layers
+            self.model_person.fuse()
+            logging.info("Models optimized with layer fusion")
+        except Exception as e:
+            logging.warning(f"Failed to optimize models: {e}")
         
         self.weapon_classes = ['api', 'tajam', 'tumpul']
         self.person_class_index = 0

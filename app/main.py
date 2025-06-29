@@ -1,4 +1,5 @@
 import logging
+import time
 from fastapi import FastAPI
 from contextlib import asynccontextmanager
 
@@ -43,6 +44,40 @@ async def lifespan(app: FastAPI):
 
 # Create FastAPI app
 app = FastAPI(title="CCTV Detection Service", lifespan=lifespan)
+
+@app.get("/health")
+async def health_check():
+    """Health check endpoint"""
+    start_time = time.time()
+    
+    # Perform basic health checks
+    try:
+        # Check if processor is available
+        processor_status = "healthy" if processor else "unhealthy"
+        
+        # Check active cameras count
+        active_cameras = len(processor.active_cams) if processor and hasattr(processor, 'active_cams') else 0
+        
+        # Calculate response time
+        response_time_ms = round((time.time() - start_time) * 1000, 2)
+        
+        return {
+            "status": "online",
+            "response_time_ms": response_time_ms,
+            "timestamp": time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime()),
+            "service": "CCTV Detection Service",
+            "processor_status": processor_status,
+            "active_cameras": active_cameras
+        }
+    except Exception as e:
+        response_time_ms = round((time.time() - start_time) * 1000, 2)
+        return {
+            "status": "online",
+            "response_time_ms": response_time_ms,
+            "timestamp": time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime()),
+            "service": "CCTV Detection Service",
+            "error": str(e)
+        }
 
 # Include routers
 app.include_router(cctv_routes.router, prefix="/cctv", tags=["CCTV"])
