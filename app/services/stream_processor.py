@@ -273,7 +273,7 @@ class StreamProcessor:
         # Set OpenCV buffer size to minimum to reduce latency
         cap = cv2.VideoCapture(ip_address)
         if not cap.isOpened():
-            logging.error(f"Failed to open camera feed: {ip_address}")
+            logging.warning(f"Failed to open camera feed for CCTV {cctv_id}: {ip_address}")
             return
             
         # Set buffer size to minimum to reduce latency
@@ -293,16 +293,20 @@ class StreamProcessor:
                 ret, frame = cap.read()
                 if not ret or frame is None:
                     failure_count += 1
-                    logging.warning(f"Failed to read frame from {cctv_id} (attempt {failure_count})")
+                    if failure_count <= 3:
+                        logging.debug(f"Failed to read frame from CCTV {cctv_id} (attempt {failure_count})")
+                    elif failure_count == 4:
+                        logging.warning(f"Multiple frame read failures for CCTV {cctv_id}")
+                    
                     if failure_count > 5:
-                        logging.error(f"Too many failures reading from {cctv_id}, reconnecting...")
+                        logging.warning(f"Too many failures reading from CCTV {cctv_id}, attempting reconnection...")
                         cap.release()
                         time.sleep(1)
                         cap = cv2.VideoCapture(ip_address)
                         cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
                         failure_count = 0
                         if not cap.isOpened():
-                            logging.error(f"Failed to reconnect to camera feed: {ip_address}")
+                            logging.warning(f"Failed to reconnect to camera feed for CCTV {cctv_id}: {ip_address}")
                             break
                     time.sleep(0.1)
                     continue

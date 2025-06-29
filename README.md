@@ -11,8 +11,24 @@ A real-time CCTV monitoring system with AI-powered weapon detection, person coun
 - **Auto Recording**: Automatic video/screenshot capture on threat detection
 - **GPU Optimization**: NVIDIA Quadro T1000 acceleration
 - **Background Processing**: Multi-threaded processing for multiple cameras
+- **Dynamic Status Monitoring**: Automatic camera connection validation and status updates
 - **System Monitoring**: Terminal output tracking and system status monitoring
 - **RESTful API**: Complete CRUD operations for camera management
+
+## 🔄 Dynamic CCTV Status Management
+
+### **Automated Status Validation**
+The service continuously monitors camera connections and automatically updates status:
+
+- **Active → Disconnect**: When a camera becomes unreachable
+- **Disconnect → Active**: When connection is restored
+- **Disabled**: Cameras are skipped from monitoring (manual control only)
+
+### **Background Monitoring**
+- **Check Interval**: Every 10 seconds (configurable)
+- **Connection Timeout**: 5 seconds per camera test
+- **Smart Caching**: Avoids redundant checks within 30 seconds
+- **Thread-Safe**: Non-blocking operation with concurrent processing
 
 ## 🛠️ Tech Stack
 
@@ -153,6 +169,97 @@ Stops background AI processing for a specific camera.
 **GET** `/stream/processor/status`
 
 Gets the status of all background processors.
+
+---
+
+## 🔄 CCTV Monitoring (`/stream/monitor`)
+
+### Get Monitoring Status
+**GET** `/stream/monitor/status`
+
+Gets comprehensive CCTV monitoring service status and statistics.
+
+**Response:**
+```json
+{
+  "monitoring_active": true,
+  "check_interval_seconds": 10,
+  "total_cameras": 4,
+  "status_distribution": {
+    "active": 2,
+    "disconnect": 1,
+    "disabled": 1
+  },
+  "cache_size": 3,
+  "last_check": "2025-06-29 15:30:25 UTC"
+}
+```
+
+### Start/Stop Monitoring
+**POST** `/stream/monitor/start`
+**POST** `/stream/monitor/stop`
+
+Start or stop the CCTV status monitoring service.
+
+**Response:**
+```json
+{
+  "message": "CCTV monitoring service started"
+}
+```
+
+### Force Camera Check
+**POST** `/stream/monitor/check/{cctv_id}`
+
+Force an immediate connection check for a specific camera.
+
+**Parameters:**
+- `cctv_id` (string): CCTV camera ID
+
+**Response:**
+```json
+{
+  "cctv_id": "1001",
+  "previous_status": "active",
+  "current_status": "disconnect",
+  "connected": false,
+  "ip_address": "rtsp://192.168.1.100:554/stream",
+  "timestamp": "2025-06-29 15:30:25 UTC"
+}
+```
+
+**Use Cases:**
+- Test camera after network changes
+- Immediate validation after configuration updates
+- Troubleshooting connection issues
+
+### Update Check Interval
+**PUT** `/stream/monitor/interval/{seconds}`
+
+Update the monitoring check interval (minimum 5 seconds).
+
+**Parameters:**
+- `seconds` (int): New check interval in seconds
+
+**Response:**
+```json
+{
+  "message": "Monitoring interval updated to 30 seconds",
+  "new_interval": 30
+}
+```
+
+### Clear Connection Cache
+**POST** `/stream/monitor/cache/clear`
+
+Clear the connection cache to force fresh checks for all cameras.
+
+**Response:**
+```json
+{
+  "message": "Connection cache cleared"
+}
+```
 
 ---
 
@@ -349,6 +456,37 @@ curl -X POST "http://localhost:8001/stream/processor/1001/start"
 
 # View live stream
 open http://localhost:8001/stream/1001
+```
+
+### 4. CCTV Status Monitoring
+```bash
+# Check monitoring service status
+curl "http://localhost:8001/stream/monitor/status"
+
+# Force check a specific camera
+curl -X POST "http://localhost:8001/stream/monitor/check/1001"
+
+# Update monitoring interval to 30 seconds
+curl -X PUT "http://localhost:8001/stream/monitor/interval/30"
+
+# Clear connection cache for fresh checks
+curl -X POST "http://localhost:8001/stream/monitor/cache/clear"
+```
+
+### 5. Camera Status Management
+```bash
+# Update camera status to disabled (stops monitoring)
+curl -X PUT "http://localhost:8001/cctv/1001" \
+  -H "Content-Type: application/json" \
+  -d '{"status": "disabled"}'
+
+# Re-enable camera (resumes monitoring)
+curl -X PUT "http://localhost:8001/cctv/1001" \
+  -H "Content-Type: application/json" \
+  -d '{"status": "active"}'
+
+# Check if camera recovered from disconnect
+curl -X POST "http://localhost:8001/stream/monitor/check/1001"
 ```
 
 ---

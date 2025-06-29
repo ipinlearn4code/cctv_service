@@ -7,6 +7,7 @@ from app.api import cctv_routes, detection_routes, streaming_routes
 from app.core.config import load_detection_config
 from app.core.csv_manager import read_csv
 from app.services.stream_processor import processor
+from app.services.cctv_monitor import cctv_monitor
 
 # Setup logging
 logging.basicConfig(
@@ -21,6 +22,10 @@ async def lifespan(app: FastAPI):
     # Startup
     config = load_detection_config()
     logging.info(f"Service started with detection config: {config}")
+    
+    # Start CCTV status monitoring
+    cctv_monitor.start_monitoring()
+    logging.info("CCTV status monitoring service started")
     
     # Start background processing for all active CCTVs
     try:
@@ -40,7 +45,9 @@ async def lifespan(app: FastAPI):
 
     # Shutdown
     logging.info("Service shutting down...")
+    cctv_monitor.stop_monitoring()  # Stop CCTV monitoring
     processor.stop_background_processing()  # Stop all background processes
+    logging.info("All services stopped")
 
 # Create FastAPI app
 app = FastAPI(title="CCTV Detection Service", lifespan=lifespan)

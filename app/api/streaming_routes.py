@@ -6,6 +6,7 @@ import logging
 import os
 import psutil
 from app.services.stream_processor import generate_frames, processor
+from app.services.cctv_monitor import cctv_monitor
 from app.core.csv_manager import read_csv
 
 router = APIRouter()
@@ -72,6 +73,72 @@ async def get_processor_status():
             "active_cameras": active_cams,
             "total_active": len(active_cams)
         }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# CCTV Monitoring Endpoints
+@router.get("/monitor/status")
+async def get_monitor_status():
+    """Get CCTV monitoring service status and statistics"""
+    try:
+        return cctv_monitor.get_monitoring_status()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/monitor/start")
+async def start_monitoring():
+    """Start CCTV status monitoring service"""
+    try:
+        cctv_monitor.start_monitoring()
+        return {"message": "CCTV monitoring service started"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/monitor/stop")
+async def stop_monitoring():
+    """Stop CCTV status monitoring service"""
+    try:
+        cctv_monitor.stop_monitoring()
+        return {"message": "CCTV monitoring service stopped"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/monitor/check/{cctv_id}")
+async def force_check_camera(cctv_id: str):
+    """Force an immediate connection check for a specific camera"""
+    try:
+        result = cctv_monitor.force_check_camera(cctv_id)
+        if "error" in result:
+            raise HTTPException(status_code=404, detail=result["error"])
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.put("/monitor/interval/{seconds}")
+async def update_check_interval(seconds: int):
+    """Update the monitoring check interval"""
+    try:
+        if seconds < 5:
+            raise HTTPException(status_code=400, detail="Check interval must be at least 5 seconds")
+        
+        cctv_monitor.update_check_interval(seconds)
+        return {
+            "message": f"Monitoring interval updated to {seconds} seconds",
+            "new_interval": seconds
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/monitor/cache/clear")
+async def clear_monitor_cache():
+    """Clear the connection cache to force fresh checks"""
+    try:
+        cctv_monitor.clear_connection_cache()
+        return {"message": "Connection cache cleared"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -161,6 +228,7 @@ async def get_system_status():
                 "active_cameras": list(processor.active_cams.keys()),
                 "total_active": len(processor.active_cams)
             },
+            "monitoring": cctv_monitor.get_monitoring_status(),
             "timestamp": __import__('datetime').datetime.now().isoformat()
         }
     except Exception as e:
