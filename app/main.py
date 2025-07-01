@@ -1,7 +1,26 @@
 import logging
 import time
+import os
 from fastapi import FastAPI
 from contextlib import asynccontextmanager
+
+# Ensure logs directory exists
+os.makedirs("logs", exist_ok=True)
+
+# Setup logging FIRST - before any other imports
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    handlers=[
+        logging.FileHandler("logs/app.log", encoding='utf-8'),
+        logging.StreamHandler()  # Also log to console
+    ],
+    force=True  # Override any existing configuration
+)
+
+# Create logger
+logger = logging.getLogger(__name__)
+logger.info("=== CCTV Service Starting ===")
 
 from app.api import cctv_routes, detection_routes, streaming_routes
 from app.core.config import load_detection_config
@@ -9,23 +28,16 @@ from app.core.csv_manager import read_csv
 from app.services.stream_processor import processor
 from app.services.cctv_monitor import cctv_monitor
 
-# Setup logging
-logging.basicConfig(
-    filename="logs/app.log",
-    level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s"
-)
-
 # Lifespan event handler
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
     config = load_detection_config()
-    logging.info(f"Service started with detection config: {config}")
+    logger.info(f"Service started with detection config: {config}")
     
     # Start CCTV status monitoring
     cctv_monitor.start_monitoring()
-    logging.info("CCTV status monitoring service started")
+    logger.info("CCTV status monitoring service started")
     
     # Start background processing for all active CCTVs
     try:
@@ -36,18 +48,18 @@ async def lifespan(app: FastAPI):
         active_cctvs = df[df["status"] == "active"]
         for _, cctv in active_cctvs.iterrows():
             cctv_id = cctv["id"]
-            logging.info(f"Starting background processing for CCTV {cctv_id} at startup")
+            logger.info(f"Starting background processing for CCTV {cctv_id} at startup")
             processor.start_background_processing(cctv_id)
     except Exception as e:
-        logging.error(f"Failed to start background processing: {e}")
+        logger.error(f"Failed to start background processing: {e}")
 
     yield  # <-- Here the app runs
 
     # Shutdown
-    logging.info("Service shutting down...")
+    logger.info("Service shutting down...")
     cctv_monitor.stop_monitoring()  # Stop CCTV monitoring
     processor.stop_background_processing()  # Stop all background processes
-    logging.info("All services stopped")
+    logger.info("All services stopped")
 
 # Create FastAPI app
 app = FastAPI(title="CCTV Detection Service", lifespan=lifespan)
