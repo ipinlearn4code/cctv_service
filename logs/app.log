@@ -1,0 +1,26 @@
+2025-07-01 18:07:02,244 - app.main - INFO - === CCTV Service Starting ===
+2025-07-01 18:07:02,794 - root - INFO - CCTV Status Monitor initialized
+2025-07-01 18:07:06,150 - root - INFO - Initializing YOLO models...
+2025-07-01 18:07:06,199 - root - INFO - Weapon detection model loaded successfully
+2025-07-01 18:07:06,381 - root - INFO - Person detection model (yolo11l.pt) loaded successfully
+2025-07-01 18:07:07,054 - root - INFO - Models optimized with layer fusion
+2025-07-01 18:07:07,056 - root - INFO - StreamProcessor initialized with optimized weapon and person models.
+2025-07-01 18:07:07,072 - app.main - INFO - Service started with detection config: {'record_duration': 10, 'enable_video': True, 'enable_screenshot': True, 'external_endpoint': 'https://example.com/upload'}
+2025-07-01 18:07:07,073 - root - INFO - CCTV status monitoring started
+2025-07-01 18:07:07,073 - app.main - INFO - CCTV status monitoring service started
+2025-07-01 18:09:08,829 - root - INFO - CCTV 1001 failed to open stream at rtsp://admin:mzone666@192.168.8.2:554/Streaming/Channels/101
+2025-07-01 18:09:08,830 - root - WARNING - CCTV 1001 connection failed - will update status to 'disconnect'
+2025-07-01 18:09:12,390 - app.main - INFO - Service shutting down...
+2025-07-01 18:09:17,397 - root - INFO - CCTV status monitoring stopped
+2025-07-01 18:09:17,397 - root - INFO - Stopping all background processing
+2025-07-01 18:09:17,398 - app.main - INFO - All services stopped
+2025-07-01 18:14:37,932 - app.main - INFO - === CCTV Service Starting ===
+2025-07-01 18:14:38,273 - root - INFO - CCTV Status Monitor initialized
+2025-07-01 18:14:40,531 - root - INFO - Initializing YOLO models...
+2025-07-01 18:14:40,665 - root - INFO - Weapon detection model loaded and optimized successfully
+2025-07-01 18:14:41,318 - root - INFO - Person detection model (yolo11l.pt) loaded and optimized successfully
+2025-07-01 18:14:41,318 - root - INFO - Models loaded and optimized successfully.
+2025-07-01 18:14:41,322 - root - INFO - StreamProcessor initialized with optimized weapon and person models.
+2025-07-01 18:14:41,337 - app.main - INFO - Service started with detection config: {'record_duration': 10, 'enable_video': True, 'enable_screenshot': True, 'external_endpoint': 'https://example.com/upload'}
+2025-07-01 18:14:41,339 - root - INFO - CCTV status monitoring started
+2025-07-01 18:14:41,339 - app.main - INFO - CCTV status monitoring service started

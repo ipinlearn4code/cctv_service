@@ -5,6 +5,8 @@ from ultralytics import YOLO
 from app.core.csv_manager import read_csv
 from app.core.config import load_detection_config
 from app.services.recording_manager import VideoRecorder
+from app.models.yolo_weapon import load_weapon_model
+from app.models.yolo_person import load_person_model
 from threading import Thread, Lock
 import time
 import queue
@@ -13,43 +15,32 @@ import asyncio
 
 class StreamProcessor:
     def __init__(self):
-        # Load models only once and optimize them
+        # Load models using optimized helper functions
         logging.info("Initializing YOLO models...")
         
         try:
-            self.model_weapon = YOLO('runs/detect/train2/weights/best.pt')
-            logging.info("Weapon detection model loaded successfully")
+            self.model_weapon = load_weapon_model()
         except Exception as e:
             logging.error(f"Failed to load weapon model: {e}")
             raise
         
         try:
-            # Try loading YOLOv11 large model, fallback to alternatives if needed
-            self.model_person = YOLO('yolo11l.pt')
-            logging.info("Person detection model (yolo11l.pt) loaded successfully")
+            self.model_person = load_person_model()
         except Exception as e:
-            logging.warning(f"Failed to load yolo11l.pt: {e}")
-            try:
-                # Fallback to YOLOv8 model which is more stable
-                logging.info("Trying fallback to yolov8n.pt...")
-                self.model_person = YOLO('yolov8n.pt')
-                logging.info("Person detection model (yolov8n.pt) loaded successfully")
-            except Exception as e2:
-                logging.error(f"Failed to load fallback model: {e2}")
-                raise
+            logging.error(f"Failed to load person model: {e}")
+            raise
         
-        # Optimize models for faster inference
-        try:
-            self.model_weapon.fuse()  # Fuse Conv+BN layers
-            self.model_person.fuse()
-            logging.info("Models optimized with layer fusion")
-        except Exception as e:
-            logging.warning(f"Failed to optimize models: {e}")
+        logging.info("Models loaded and optimized successfully.")
         
         self.weapon_classes = ['api', 'tajam', 'tumpul']
         self.person_class_index = 0
         self.recorders = {}
         self.config = load_detection_config()
+        
+        # Cache for CSV data to avoid repeated file reads
+        self._csv_cache = {}
+        self._csv_cache_time = {}
+        self._csv_cache_ttl = 30  # Cache for 30 seconds
         
         # Store the latest processed frames for each CCTV
         self.latest_frames = {}
@@ -225,8 +216,8 @@ class StreamProcessor:
                 logging.info(f"Background processing already running for CCTV {cctv_id}")
                 return
             
-            # Get camera information
-            df = read_csv("data/cctv_config.csv", ["id", "name", "ip_address", "location", "status"])
+            # Get camera information with caching
+            df = self._get_cached_csv("data/cctv_config.csv", ["id", "name", "ip_address", "location", "status"])
             df["id"] = df["id"].astype(str).str.strip().str.strip('"')
             cctv_id_clean = str(cctv_id).strip().strip('"')
             
@@ -402,6 +393,28 @@ class StreamProcessor:
                 self.recorders[cctv_id].add_frame(frame)
         except Exception as e:
             logging.error(f"Error adding frame to recorder: {e}")
+
+    def _get_cached_csv(self, file_path, columns):
+        """Get CSV data with caching to reduce file I/O operations"""
+        current_time = time.time()
+        
+        # Check if we have valid cached data
+        if (file_path in self._csv_cache and 
+            file_path in self._csv_cache_time and
+            current_time - self._csv_cache_time[file_path] < self._csv_cache_ttl):
+            return self._csv_cache[file_path]
+        
+        # Read fresh data and cache it
+        df = read_csv(file_path, columns)
+        self._csv_cache[file_path] = df
+        self._csv_cache_time[file_path] = current_time
+        return df
+
+    def clear_csv_cache(self):
+        """Clear CSV cache to force fresh reads"""
+        self._csv_cache.clear()
+        self._csv_cache_time.clear()
+        logging.info("CSV cache cleared")
 
 # Create processor instance
 processor = StreamProcessor()
