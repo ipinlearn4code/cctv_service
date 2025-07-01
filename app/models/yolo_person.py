@@ -5,7 +5,7 @@ def load_person_model():
     """Load and return optimized person detection model with fallback"""
     try:
         # Try loading YOLOv11 large model first
-        model = YOLO('yolo11l.pt')
+        model = YOLO('data/models/yolo11l.pt')
         model.fuse()  # Optimize model
         logging.info("Person detection model (yolo11l.pt) loaded and optimized successfully")
         return model

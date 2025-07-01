@@ -1,6 +1,6 @@
 id,name,ip_address,location,status
 1001,CCTV12345,rtsp://admin:mzone666@192.168.8.2:554/Streaming/Channels/101,kanan,disconnect
 1002,CCTV2,rtsp://admin:mzone666@192.168.8.3:554/Streaming/Channels/101,kiri,disconnect
-fd258d5a-3e2a-4a68-9c0c-befb8c53c306,camera001,http://127.0.0.1:5050/video_feed,Bekasi,active
+fd258d5a-3e2a-4a68-9c0c-befb8c53c306,camera001,http://127.0.0.1:5050/video_feed,Bekasi,disconnect
 c3093399-6335-4ab2-b6ec-c606fd0b063d,WebcamTest21QQ,http://192.168.1.100:554/stream,Bekasi,disconnect
 camera01,WebcamTest21Q1Q,http://192.168.1.101:554/stream,Bekasi,disconnect

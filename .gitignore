@@ -1,4 +1,4 @@
 # Ignore all files in data/temp directory
 data/temp/
-# logs/
+logs/
 # Ignore all files in data/processed directory
