@@ -8,11 +8,12 @@ from app.services.file_uploader import upload_file
 from app.core.config import load_detection_config
 
 class VideoRecorder:
-    def __init__(self, cctv_id: str, duration: int, enable_video: bool, enable_screenshot: bool):
+    def __init__(self, cctv_id: str, duration: int, enable_video: bool, enable_screenshot: bool, detection_type: str = "unknown"):
         self.cctv_id = cctv_id
         self.duration = duration
         self.enable_video = enable_video
         self.enable_screenshot = enable_screenshot
+        self.detection_type = detection_type
         self.frame_queue = Queue(maxsize=300)  # Limit queue size to prevent memory issues
         self.recording = False
         self.last_record_time = 0
@@ -20,8 +21,12 @@ class VideoRecorder:
         self.max_frames_per_second = 15  # Limit recording to 15 fps to reduce strain
         self.last_frame_time = 0
 
-    def add_frame(self, frame):
+    def add_frame(self, frame, detection_type="unknown"):
         current_time = time.time()
+        
+        # Update detection type if provided
+        if detection_type != "unknown":
+            self.detection_type = detection_type
         
         # Check if we are allowed to record (based on time since last recording)
         if current_time - self.last_record_time < self.duration and self.recording:
@@ -140,9 +145,9 @@ class VideoRecorder:
                 config = load_detection_config()
                 for file_type, file_path in files:
                     try:
-                        upload_file(file_path, file_type, self.cctv_id, config["external_endpoint"])
+                        upload_file(file_path, file_type, self.cctv_id, config["external_endpoint"], self.detection_type)
                         os.remove(file_path)
-                        logging.info(f"File uploaded and deleted: {file_path}")
+                        logging.info(f"File uploaded and deleted: {file_path} (detection: {self.detection_type})")
                     except Exception as e:
                         logging.error(f"Failed to upload {file_path}: {str(e)}")
 

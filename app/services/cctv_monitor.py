@@ -2,7 +2,7 @@ import cv2
 import asyncio
 import logging
 import time
-from typing import Dict, Set
+from typing import Dict
 from threading import Thread, Lock
 from app.core.csv_manager import read_csv, write_csv
 import pandas as pd

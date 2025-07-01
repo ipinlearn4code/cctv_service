@@ -1,5 +1,5 @@
 import cv2
-import numpy as np
+# import numpy as np
 import logging
 from ultralytics import YOLO
 from app.core.csv_manager import read_csv
@@ -81,21 +81,65 @@ class StreamProcessor:
         
         return inter_area / union_area if union_area > 0 else 0
 
-    def _are_boxes_close(self, box1, box2, proximity=10):
-        """Check if two bounding boxes are within proximity pixels or overlapping."""
+    def _calculate_pixel_distance(self, box1, box2):
+        """Calculate minimum pixel distance between two bounding boxes."""
         x1, y1, x2, y2 = box1
         x1_b, y1_b, x2_b, y2_b = box2
         
-        # Check if boxes overlap (IoU > 0) or are within proximity
-        if self._calculate_iou(box1, box2) > 0:
+        # If boxes overlap, distance is 0
+        if not (x2 < x1_b or x2_b < x1 or y2 < y1_b or y2_b < y1):
+            return 0
+        
+        # Calculate minimum distance between box edges
+        dx = max(0, max(x1_b - x2, x1 - x2_b))
+        dy = max(0, max(y1_b - y2, y1 - y2_b))
+        return (dx ** 2 + dy ** 2) ** 0.5
+
+    def _are_boxes_connected(self, box1, box2, overlap_threshold):
+        """Check if two bounding boxes are connected based on overlap threshold."""
+        # Check IoU overlap
+        iou = self._calculate_iou(box1, box2)
+        if iou > 0.2:  # IoU threshold for overlap
             return True
         
-        # Check if boxes are within proximity
-        if (x1 - proximity <= x2_b and x2 + proximity >= x1_b and
-            y1 - proximity <= y2_b and y2 + proximity >= y1_b):
-            return True
+        # Check pixel distance
+        pixel_distance = self._calculate_pixel_distance(box1, box2)
+        return pixel_distance <= overlap_threshold
+
+    def _find_crowd_groups(self, person_boxes, crowd_threshold, overlap_threshold):
+        """Find groups of connected person boxes that form crowds."""
+        if len(person_boxes) < crowd_threshold:
+            return []
         
-        return False
+        # Create adjacency list for connected boxes
+        n = len(person_boxes)
+        adjacency = [[] for _ in range(n)]
+        
+        for i in range(n):
+            for j in range(i + 1, n):
+                if self._are_boxes_connected(person_boxes[i], person_boxes[j], overlap_threshold):
+                    adjacency[i].append(j)
+                    adjacency[j].append(i)
+        
+        # Find connected components using DFS
+        visited = [False] * n
+        crowd_groups = []
+        
+        def dfs(node, group):
+            visited[node] = True
+            group.append(node)
+            for neighbor in adjacency[node]:
+                if not visited[neighbor]:
+                    dfs(neighbor, group)
+        
+        for i in range(n):
+            if not visited[i]:
+                group = []
+                dfs(i, group)
+                if len(group) >= crowd_threshold:
+                    crowd_groups.append(group)
+        
+        return crowd_groups
 
     def process_frame(self, frame, cctv_id):
         # Resize image for faster processing if necessary
@@ -137,6 +181,8 @@ class StreamProcessor:
         # Process person detections
         count_person = 0
         person_boxes = []
+        person_details = []  # Store box details with confidence
+        
         for box in result_person.boxes:
             if int(box.cls) == self.person_class_index:
                 count_person += 1
@@ -147,43 +193,57 @@ class StreamProcessor:
                     coords = [c / scale for c in coords]
                 
                 person_boxes.append(coords)
-                
-                x1, y1, x2, y2 = map(int, coords)
-                conf = float(box.conf)
-                
-                # Draw bounding box
-                cv2.rectangle(annotated_frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
-                cv2.putText(annotated_frame, f'{conf:.2f}', (x1, y1 - 10), 
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+                person_details.append({
+                    'coords': coords,
+                    'confidence': float(box.conf)
+                })
 
-        # Check for crowded person detection (15 or more persons with close/overlapping boxes)
-        if count_person >= 15:
-            proximity = 10  # Proximity threshold in pixels
-            groups = []
-            visited = set()
+        # Enhanced crowd detection using new algorithm
+        crowd_threshold = self.config.get("crowd_threshold", 15)
+        overlap_threshold = self.config.get("overlap_threshold", 10)
+        
+        crowd_groups = self._find_crowd_groups(person_boxes, crowd_threshold, overlap_threshold)
+        person_crowd_detected = len(crowd_groups) > 0
+        
+        # Create set of person indices that are part of crowds
+        crowd_person_indices = set()
+        for group in crowd_groups:
+            crowd_person_indices.update(group)
+
+        # Draw person bounding boxes with appropriate colors
+        for i, person_detail in enumerate(person_details):
+            coords = person_detail['coords']
+            x1, y1, x2, y2 = map(int, coords)
+            conf = person_detail['confidence']
             
-            for i, box in enumerate(person_boxes):
-                if i not in visited:
-                    current_group = [i]
-                    visited.add(i)
-                    for j, other_box in enumerate(person_boxes):
-                        if j not in visited and i != j:
-                            if self._are_boxes_close(box, other_box, proximity):
-                                current_group.append(j)
-                                visited.add(j)
-                    groups.append(current_group)
+            # Choose color based on crowd detection
+            if i in crowd_person_indices:
+                color = (0, 255, 255)  # Yellow for crowd members
+                label = f'Crowd {conf:.2f}'
+            else:
+                color = (0, 255, 0)    # Green for individual persons
+                label = f'Person {conf:.2f}'
             
-            # If any group has 15 or more persons, trigger crowd detection
-            for group in groups:
-                if len(group) >= 15:
-                    person_crowd_detected = True
-                    break
+            # Draw bounding box
+            cv2.rectangle(annotated_frame, (x1, y1), (x2, y2), color, 2)
+            cv2.putText(annotated_frame, label, (x1, y1 - 10), 
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
 
         # Add counts to frame
         y_offset = 30
         cv2.putText(annotated_frame, f'Person: {count_person}', (10, y_offset), 
                     cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 0), 2)
         y_offset += 30
+        
+        # Add crowd information
+        if person_crowd_detected:
+            total_crowd_members = len(crowd_person_indices)
+            cv2.putText(annotated_frame, f'Crowd Members: {total_crowd_members}', (10, y_offset), 
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 255), 2)
+            y_offset += 30
+            cv2.putText(annotated_frame, f'Crowd Groups: {len(crowd_groups)}', (10, y_offset), 
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 255), 2)
+            y_offset += 30
         
         # Precalculate weapon counts
         weapon_counts = [0] * len(self.weapon_classes)
@@ -200,12 +260,20 @@ class StreamProcessor:
 
         # Add crowd detection status
         if person_crowd_detected:
-            cv2.putText(annotated_frame, 'Crowd Detected', (10, y_offset), 
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 0, 0), 2)
+            cv2.putText(annotated_frame, 'CROWD DETECTED!', (10, y_offset), 
+                        cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 0, 255), 3)
 
         # Handle recording - trigger for weapons or crowded persons
-        if (weapon_detected or person_crowd_detected) and (self.config["enable_video"] or self.config["enable_screenshot"]):
-            self._submit_frame_for_recording(cctv_id, annotated_frame.copy())
+        detection_type = None
+        if weapon_detected and person_crowd_detected:
+            detection_type = "weapon_crowd"
+        elif weapon_detected:
+            detection_type = "weapon"
+        elif person_crowd_detected:
+            detection_type = "crowd"
+            
+        if detection_type and (self.config["enable_video"] or self.config["enable_screenshot"]):
+            self._submit_frame_for_recording(cctv_id, annotated_frame.copy(), detection_type)
 
         return annotated_frame
 
@@ -334,8 +402,8 @@ class StreamProcessor:
                         frame_skip = max(0, int(avg_process_time / 0.033) - 1)
                     
                     # Log performance metrics periodically
-                    if len(self.processing_times[cctv_id]) % 100 == 0:
-                        logging.info(f"CCTV {cctv_id} avg processing time: {avg_process_time*1000:.1f}ms, frame skip: {frame_skip}")
+                    # if len(self.processing_times[cctv_id]) % 100 == 0:
+                        # logging.info(f"CCTV {cctv_id} avg processing time: {avg_process_time*1000:.1f}ms, frame skip: {frame_skip}")
                         
                 except Exception as e:
                     logging.error(f"Error processing frame for {cctv_id}: {e}")
@@ -360,7 +428,7 @@ class StreamProcessor:
                 return self.latest_frames[cctv_id].copy()
         return None
 
-    def _submit_frame_for_recording(self, cctv_id, frame):
+    def _submit_frame_for_recording(self, cctv_id, frame, detection_type="unknown"):
         """
         Non-blocking method to handle frame recording when weapons or crowd are detected.
         """
@@ -370,27 +438,28 @@ class StreamProcessor:
                 self.recorders[cctv_id] = VideoRecorder(
                     cctv_id, self.config["record_duration"], 
                     self.config["enable_video"], 
-                    self.config["enable_screenshot"]
+                    self.config["enable_screenshot"],
+                    detection_type
                 )
                 # Start the recording in a separate thread
                 Thread(target=self.recorders[cctv_id].start_recording, daemon=True).start()
-                logging.info(f"Started new recording for CCTV {cctv_id} due to detection")
+                logging.info(f"Started new recording for CCTV {cctv_id} due to {detection_type} detection")
                 
             # Use a separate thread to add the frame to avoid blocking the inference
             Thread(
                 target=self._add_frame_to_recorder,
-                args=(cctv_id, frame),
+                args=(cctv_id, frame, detection_type),
                 daemon=True
             ).start()
             
         except Exception as e:
             logging.error(f"Error submitting frame for recording: {e}")
             
-    def _add_frame_to_recorder(self, cctv_id, frame):
+    def _add_frame_to_recorder(self, cctv_id, frame, detection_type="unknown"):
         """Helper method to add a frame to a recorder in a separate thread"""
         try:
             if cctv_id in self.recorders:
-                self.recorders[cctv_id].add_frame(frame)
+                self.recorders[cctv_id].add_frame(frame, detection_type)
         except Exception as e:
             logging.error(f"Error adding frame to recorder: {e}")
 
