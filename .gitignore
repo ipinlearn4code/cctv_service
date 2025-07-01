@@ -1,2 +1,4 @@
 # Ignore all files in data/temp directory
 data/temp/
+# logs/
+# Ignore all files in data/processed directory
