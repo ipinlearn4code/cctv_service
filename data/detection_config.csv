@@ -1,2 +1,2 @@
 record_duration,enable_video,enable_screenshot,external_endpoint,crowd_threshold,overlap_threshold
-10,true,true,"http://127.0.0.1:8080/",15,10
+10,true,true,"http://laravel.test:80",15,10

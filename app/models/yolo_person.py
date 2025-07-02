@@ -11,6 +11,7 @@ def load_person_model():
         return model
     except Exception as e:
         logging.warning(f"Failed to load yolo11l.pt: {e}")
+        
         try:
             # Fallback to YOLOv8 model
             logging.info("Trying fallback to yolov8n.pt...")
@@ -20,4 +21,14 @@ def load_person_model():
             return model
         except Exception as e2:
             logging.error(f"Failed to load fallback model: {e2}")
-            raise
+            
+            # Try one more time with a downloaded model
+            try:
+                logging.info("Attempting to download YOLO model as last resort")
+                model = YOLO('yolov8n.pt', download=True)
+                model.fuse()
+                logging.info("Downloaded person detection model as last resort")
+                return model
+            except Exception as e3:
+                logging.error(f"All attempts to load person detection model failed: {e3}")
+                raise
