@@ -151,7 +151,7 @@ class StreamProcessor:
             frame_resized = frame
         
         # Run inference with batch size optimization
-        result_weapon = self.model_weapon(frame_resized, conf=0.5, verbose=False)[0]
+        result_weapon = self.model_weapon(frame_resized, conf=0.6, verbose=False)[0]
         result_person = self.model_person(frame_resized, conf=0.3, verbose=False)[0]
         weapon_detected = False
         person_crowd_detected = False
@@ -199,7 +199,7 @@ class StreamProcessor:
                 })
 
         # Enhanced crowd detection using new algorithm
-        crowd_threshold = self.config.get("crowd_threshold", 15)
+        crowd_threshold = self.config.get("crowd_threshold", 10)
         overlap_threshold = self.config.get("overlap_threshold", 10)
         
         crowd_groups = self._find_crowd_groups(person_boxes, crowd_threshold, overlap_threshold)
@@ -230,10 +230,10 @@ class StreamProcessor:
                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
 
         # Add counts to frame
-        y_offset = 30
-        cv2.putText(annotated_frame, f'Person: {count_person}', (10, y_offset), 
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 0), 2)
-        y_offset += 30
+        # y_offset = 30
+        # cv2.putText(annotated_frame, f'Person: {count_person}', (10, y_offset), 
+        #             cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 0), 2)
+        # y_offset += 30
         
         # Add crowd information
         if person_crowd_detected:
@@ -252,11 +252,11 @@ class StreamProcessor:
             if cls_id < len(self.weapon_classes):
                 weapon_counts[cls_id] += 1
         
-        # Add weapon counts
-        for i, cls in enumerate(self.weapon_classes):
-            cv2.putText(annotated_frame, f'{cls}: {weapon_counts[i]}', (10, y_offset), 
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 0), 2)
-            y_offset += 30
+        # # Add weapon counts
+        # for i, cls in enumerate(self.weapon_classes):
+        #     cv2.putText(annotated_frame, f'{cls}: {weapon_counts[i]}', (10, y_offset), 
+        #                 cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 0), 2)
+        #     y_offset += 30
 
         # Add crowd detection status
         if person_crowd_detected:
@@ -266,7 +266,7 @@ class StreamProcessor:
         # Handle recording - trigger for weapons or crowded persons
         detection_type = None
         if weapon_detected and person_crowd_detected:
-            detection_type = "weapon_crowd"
+            detection_type = "weapon&crowd"
         elif weapon_detected:
             detection_type = "weapon"
         elif person_crowd_detected:
