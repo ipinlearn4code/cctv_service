@@ -44,8 +44,8 @@ def verify_model_paths():
     """Verify the existence of the model files and log their status"""
     model_paths = [
         'data/models/yolo11l.pt',
-        'yolov8n.pt',  # Default fallback model
-        'data/models/detect/train2/weights/best.pt'
+        'data/models/yolov8n.pt',  # Default fallback model
+        'data/models/weapon/best.pt'
     ]
     
     results = {}
