@@ -5,7 +5,7 @@ def load_person_model():
     """Load and return optimized person detection model with fallback"""
     try:
         # Try loading YOLOv11 large model first
-        model = YOLO('data/models/yolo11l.pt')
+        model = YOLO('/app/data/models/yolo11l.pt')
         model.fuse()  # Optimize model
         logging.info("Person detection model (yolo11l.pt) loaded and optimized successfully")
         return model
@@ -15,7 +15,7 @@ def load_person_model():
         try:
             # Fallback to YOLOv8 model
             logging.info("Trying fallback to yolov8n.pt...")
-            model = YOLO('yolov8n.pt')
+            model = YOLO('/app/data/models/yolov8n.pt')
             model.fuse()  # Optimize model
             logging.info("Person detection model (yolov8n.pt) loaded and optimized successfully")
             return model
@@ -25,7 +25,7 @@ def load_person_model():
             # Try one more time with a downloaded model
             try:
                 logging.info("Attempting to download YOLO model as last resort")
-                model = YOLO('yolov8n.pt', download=True)
+                model = YOLO('yolov8n.pt', download=True)  # This will download to the current directory
                 model.fuse()
                 logging.info("Downloaded person detection model as last resort")
                 return model

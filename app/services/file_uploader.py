@@ -33,8 +33,8 @@ def upload_file(file_path: str, file_type: str, cctv_id: str, endpoint: str, det
             }
             data = {
                 "cctv_name": cctv_name,
-                "detection_type": detection_type,
-                "timestamp": datetime.utcnow().isoformat() + "Z"
+                "detection_type": detection_type
+                # "timestamp": datetime.utcnow().isoformat() + "Z"
             }
             
             # Construct the full upload endpoint

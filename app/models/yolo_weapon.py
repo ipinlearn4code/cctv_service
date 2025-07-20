@@ -4,7 +4,7 @@ import logging
 def load_weapon_model():
     """Load and return optimized weapon detection model"""
     try:
-        model = YOLO('data/models/detect/train3/weights/best.pt')
+        model = YOLO('/app/data/models/detect/train3/weights/best.pt')
         model.fuse()  # Optimize model
         logging.info("Weapon detection model loaded and optimized successfully")
         return model
@@ -14,7 +14,7 @@ def load_weapon_model():
         try:
             # Try using the default YOLO model as fallback
             logging.info("Attempting to load default model as fallback")
-            model = YOLO('yolov8n.pt')
+            model = YOLO('/app/data/models/yolov8n.pt')
             model.fuse()  # Optimize model
             logging.warning("Using default YOLO model instead of weapon-specific model")
             return model

@@ -42,10 +42,12 @@ def patch_ultralytics_loader():
 
 def verify_model_paths():
     """Verify the existence of the model files and log their status"""
+    # Use absolute paths for Docker container environment
+    base_path = "/app"
     model_paths = [
-        'data/models/yolo11l.pt',
-        'yolov8n.pt',  # Default fallback model
-        'data/models/detect/train2/weights/best.pt'
+        os.path.join(base_path, 'data/models/yolo11l.pt'),
+        os.path.join(base_path, 'data/models/yolov8n.pt'),  # Default fallback model
+        os.path.join(base_path, 'data/models/detect/train2/weights/best.pt')
     ]
     
     results = {}
